@@ -1,0 +1,16 @@
+{
+  "name": "i2c-sample",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bme280-sensor": "^0.1.7",
+    "i2c-bus": "^5.2.0"
+  }
+}
