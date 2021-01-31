@@ -1,8 +1,14 @@
 const i2c = require('i2c-bus')
+const SerialPort = require('serialport')
 
+// i2c
 const DEVICE_NUMBER = 1
 // BME280 device address
 const BME280 = 0x76
+
+// UART
+const DEVICE_FILE_PATH = '/dev/serial0'
+const SERIAL_OPTION = { baudRate: 38400 }
 
 /**
  * 温度
@@ -37,7 +43,7 @@ const ctrl_meas = 0b00100111
 
 /**
  * 湿度
- * 
+ *
  * adc_H (unsigned int32 BE)
  * 0xFD [15:8]
  * 0xFE [7:0]
@@ -56,15 +62,15 @@ const rbufH = Buffer.alloc(4)
  *
  * dig_H3 (signed int8)
  * 0xe3 [7:0]
- * 
+ *
  * dig_H4 (signed int16 LE)
  * 0xe4 [11:4]
  * 0xe5 [7:0]
- * 
+ *
  * dig_H5 (signed int16 LE)
  * 0xe5 [7:0]
  * 0xe6 [11:4]
- * 
+ *
  * dig_H6 (signed int8)
  * 0xe7 [7:0]
  */
@@ -102,27 +108,27 @@ const rbufP = Buffer.alloc(4)
  * dig_P3 (signed int16 LE)
  * 0x92 [7:0]
  * 0x93 [15:8]
- * 
+ *
  * dig_P4 (signed int16 LE)
  * 0x94 [7:0]
  * 0x95 [15:8]
- * 
+ *
  * dig_P5 (signed int16 LE)
  * 0x96 [7:0]
  * 0x97 [15:8]
- * 
+ *
  * dig_P6 (signed int16 LE)
  * 0x98 [7:0]
  * 0x99 [15:8]
- * 
+ *
  * dig_P7 (signed int16 LE)
  * 0x9A [7:0]
  * 0x9B [15:8]
- * 
+ *
  * dig_P8 (signed int16 LE)
  * 0x9C [7:0]
  * 0x9D [15:8]
- * 
+ *
  * dig_P9 (signed int16 LE)
  * 0x9E [7:0]
  * 0x9F [15:8]
@@ -162,7 +168,7 @@ const buf_dig_p = Buffer.alloc(19)
   const t_fine = var1 + var2
   const T = ((t_fine * 5 + 128) >> 8) / 100
   console.log(`Temperature: ${T} C`)
-  
+
 
 
   console.log('dig_h1')
@@ -181,9 +187,9 @@ const buf_dig_p = Buffer.alloc(19)
 
 
   var v_x1 = (t_fine - (76800));
-  v_x1 = (((((adc_H << 14) -((dig_H4) << 20) - ((dig_H5) * v_x1)) + 
-              (16384)) >> 15) * (((((((v_x1 * (dig_H6)) >> 10) * 
-              (((v_x1 * (dig_H3)) >> 11) + ( 32768))) >> 10) + (2097152)) * 
+  v_x1 = (((((adc_H << 14) -((dig_H4) << 20) - ((dig_H5) * v_x1)) +
+              (16384)) >> 15) * (((((((v_x1 * (dig_H6)) >> 10) *
+              (((v_x1 * (dig_H3)) >> 11) + ( 32768))) >> 10) + (2097152)) *
               ( dig_H2) + 8192) >> 14));
   v_x1 = (v_x1 - (((((v_x1 >> 15) * (v_x1 >> 15)) >> 7) * (dig_H1)) >> 4));
   v_x1 = (v_x1 < 0 ? 0 : v_x1);
@@ -207,14 +213,14 @@ const buf_dig_p = Buffer.alloc(19)
   const dig_P7 = dig_p.buffer.readInt16LE(12)
   const dig_P8 = dig_p.buffer.readInt16LE(14)
   const dig_P9 = dig_p.buffer.readInt16LE(16)
-     
+
   var   v1 = (t_fine / 2.0) - 64000.0
   var  v2 = (((v1 / 4.0) * (v1 / 4.0)) / 2048) * dig_P6
     v2 = v2 + ((v1 * dig_P5) * 2.0)
     v2 = (v2 / 4.0) + (dig_P4 * 65536.0)
     v1 = (((dig_P3 * (((v1 / 4.0) * (v1 / 4.0)) / 8192)) / 8)  + ((dig_P2 * v1) / 2.0)) / 262144
     v1 = ((32768 + v1) * dig_P1) / 32768
-     
+
     if( v1 == 0){
       console.log(`pressure: 0 `)
     }
@@ -233,7 +239,23 @@ const buf_dig_p = Buffer.alloc(19)
     console.log(`pressure: ${pressure}hPa `)
 
 
+    const port = new SerialPort(DEVICE_FILE_PATH, SERIAL_OPTION)
 
+    let uartBuf = ''
+    port.on('data', (data) => {
+      uartBuf += data
+      // console.log(`buf: ${JSON.stringify(uartBuf)}`)
+      const match = uartBuf.match(/^.+\r\n/)
+      if (match)  {
+        const co2ppm = match.toString().match(/\d+/)
+        console.log(`${new Date().toISOString()} CO2: ${co2ppm} ppm`)
+        uartBuf = uartBuf.slice(match.index + match.toString().length)
+      }
+    });
+
+    port.on('error', (err) => {
+      console.log('ERROR', err);
+    });
 })()
 
 function pp(addr, buffer, trim = buffer.length) {
